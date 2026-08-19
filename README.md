@@ -60,6 +60,15 @@ You can automate step counting state with apps such as Tasker using broadcast in
 |Package|com.nvllz.stepsy|
 |Activity/Action|com.nvllz.stepsy.action.PAUSE (or RESUME)|
 
+## Building
+
+```bash
+./gradlew assembleFossDebug     # no Google dependencies
+./gradlew assembleFullDebug     # adds Play Services (Activity Recognition)
+```
+
+Release builds are cut by pushing a `v*` tag; see [RELEASING.md](RELEASING.md).
+
 ## Dependencies
 
 - [MPAndroidChart](https://github.com/PhilJay/MPAndroidChart) - Apache License 2.0

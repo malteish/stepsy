@@ -1,0 +1,307 @@
+# ===================================================================
+# Stepsy release pipeline
+#
+#   1. verify:  version/tag/changelog sanity checks — fails fast, before any build
+#   2. build:   signed release APKs for both flavors + SHA-256 checksums
+#   3. release: draft GitHub Release with the fastlane changelog as release notes
+#
+# Triggers:
+#   - push of a `v*` tag (e.g. `v1.6.3`): runs all three jobs and drafts a release.
+#   - manual dispatch:                    runs verify + build only, so signing and
+#                                         packaging can be rehearsed without publishing.
+#
+# Cutting a release:
+#   1. bump `appVersionCode` / `appVersionName` in app/build.gradle
+#   2. add fastlane/metadata/android/en-US/changelogs/<versionCode>.txt
+#   3. commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`
+#   4. review the drafted release on GitHub and publish it
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   KEYSTORE_BASE64    `base64 -w0 keystore.jks` of the upload/signing keystore
+#   KEYSTORE_PASSWORD  keystore password
+#   KEY_ALIAS          key alias inside the keystore
+#   KEY_PASSWORD       password of that key
+# The same key must sign every release — Android refuses to update an app whose
+# signature changed, so losing this keystore means every user has to reinstall.
+# ===================================================================
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ===================================================================
+  # JOB: verify
+  #
+  # Catches the mistakes that are expensive to notice after publishing: a tag
+  # that disagrees with the version in the build file, a missing changelog, or
+  # a missing signing keystore. Everything here is cheap and needs no toolchain.
+  # ===================================================================
+  verify:
+    name: Verify version and changelog
+    runs-on: ubuntu-latest
+    outputs:
+      version_name: ${{ steps.version.outputs.version_name }}
+      version_code: ${{ steps.version.outputs.version_code }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read version from app/build.gradle
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION_NAME=$(grep -oP '^def appVersionName = "\K[^"]+' app/build.gradle)
+          VERSION_CODE=$(grep -oP '^def appVersionCode = \K\d+' app/build.gradle)
+          if [[ -z "$VERSION_NAME" || -z "$VERSION_CODE" ]]; then
+            echo "::error::Could not parse appVersionName/appVersionCode from app/build.gradle"
+            exit 1
+          fi
+
+          # Pre-release tags (v1.7.0-rc1, v1.7.0-beta2, ...) are marked as such on GitHub
+          # so Obtainium and friends can skip them unless the user opts in.
+          PRERELEASE=false
+          if [[ "$VERSION_NAME" == *-* ]]; then
+            PRERELEASE=true
+          fi
+
+          {
+            echo "version_name=$VERSION_NAME"
+            echo "version_code=$VERSION_CODE"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "versionName=$VERSION_NAME versionCode=$VERSION_CODE prerelease=$PRERELEASE"
+
+      - name: Check the tag matches the version in the build file
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          EXPECTED="v${{ steps.version.outputs.version_name }}"
+          if [[ "$GITHUB_REF_NAME" != "$EXPECTED" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match app/build.gradle (expected $EXPECTED)."
+            echo "::error::Bump appVersionName, or retag with $EXPECTED."
+            exit 1
+          fi
+
+      - name: Check the fastlane changelog exists
+        run: |
+          set -euo pipefail
+          CHANGELOG="fastlane/metadata/android/en-US/changelogs/${{ steps.version.outputs.version_code }}.txt"
+          if [[ ! -s "$CHANGELOG" ]]; then
+            echo "::error::Missing or empty $CHANGELOG — F-Droid and IzzyOnDroid read release notes from that file."
+            exit 1
+          fi
+
+      - name: Check the signing secrets are present
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          MISSING=()
+          [[ -n "$KEYSTORE_BASE64" ]]   || MISSING+=("KEYSTORE_BASE64")
+          [[ -n "$KEYSTORE_PASSWORD" ]] || MISSING+=("KEYSTORE_PASSWORD")
+          [[ -n "$KEY_ALIAS" ]]         || MISSING+=("KEY_ALIAS")
+          [[ -n "$KEY_PASSWORD" ]]      || MISSING+=("KEY_PASSWORD")
+          if (( ${#MISSING[@]} )); then
+            echo "::error::Missing repository secrets: ${MISSING[*]}"
+            exit 1
+          fi
+
+      - name: Summarize
+        run: |
+          {
+            echo "### Stepsy ${{ steps.version.outputs.version_name }}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| versionName | \`${{ steps.version.outputs.version_name }}\` |"
+            echo "| versionCode | \`${{ steps.version.outputs.version_code }}\` |"
+            echo "| pre-release | \`${{ steps.version.outputs.prerelease }}\` |"
+            echo "| trigger | \`${{ github.event_name }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ===================================================================
+  # JOB: build
+  #
+  # Assembles and signs the release APK for both flavors, then proves the
+  # signature is really there before anything gets uploaded. `foss` is the
+  # F-Droid/IzzyOnDroid build with no Google dependencies; `full` adds the
+  # Activity Recognition API and is distributed through GitHub/Obtainium only.
+  # ===================================================================
+  build:
+    name: Build signed APKs
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: true
+          cache-read-only: true
+
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          # Kept in RUNNER_TEMP rather than the workspace so it can never be swept
+          # into an artifact or a build output directory.
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/keystore.jks"
+          test -s "$RUNNER_TEMP/keystore.jks"
+
+      - name: Assemble signed release APKs
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleFossRelease assembleFullRelease
+
+      - name: Collect APKs and checksums
+        run: |
+          set -euo pipefail
+          VERSION="v${{ needs.verify.outputs.version_name }}"
+          mkdir -p dist
+          for FLAVOR in foss full; do
+            # `base.archivesName` already produces stepsy-<version>-<flavor>-release.apk;
+            # globbing rather than matching that name exactly keeps this step working if the
+            # naming ever changes. Exactly one APK per flavor is expected — anything else
+            # means the build produced something unexpected and is worth stopping for.
+            mapfile -t FOUND < <(find "app/build/outputs/apk/$FLAVOR/release" -maxdepth 1 -name '*.apk' | sort)
+            if (( ${#FOUND[@]} != 1 )); then
+              echo "::error::Expected exactly one $FLAVOR release APK, found ${#FOUND[@]}:"
+              find app/build/outputs/apk -name '*.apk' -print
+              exit 1
+            fi
+            # Published assets drop the redundant `-release` suffix.
+            cp "${FOUND[0]}" "dist/stepsy-$VERSION-$FLAVOR.apk"
+            echo "$FLAVOR: ${FOUND[0]} -> dist/stepsy-$VERSION-$FLAVOR.apk"
+          done
+          ( cd dist && sha256sum ./*.apk > SHA256SUMS.txt )
+          cat dist/SHA256SUMS.txt
+
+      - name: Verify the APKs are signed
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n1)
+          echo "Using $BUILD_TOOLS/apksigner"
+          for APK in dist/*.apk; do
+            echo "::group::$APK"
+            # Fails outright on an unsigned APK, which is what an absent or broken
+            # keystore would silently produce.
+            "$BUILD_TOOLS/apksigner" verify --print-certs --verbose "$APK"
+            echo "::endgroup::"
+          done
+
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/keystore.jks"
+
+      - name: Upload release APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: stepsy-release-v${{ needs.verify.outputs.version_name }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  # ===================================================================
+  # JOB: release
+  #
+  # Tag pushes only. Creates a *draft* release so the notes can be reviewed
+  # before anything reaches users; publishing it is a manual click.
+  # ===================================================================
+  release:
+    name: Draft GitHub release
+    runs-on: ubuntu-latest
+    needs: [ verify, build ]
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download release APKs
+        uses: actions/download-artifact@v4
+        with:
+          name: stepsy-release-v${{ needs.verify.outputs.version_name }}
+          path: dist
+
+      - name: Build release notes
+        env:
+          VERSION_NAME: ${{ needs.verify.outputs.version_name }}
+          VERSION_CODE: ${{ needs.verify.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          CHANGELOG="fastlane/metadata/android/en-US/changelogs/${VERSION_CODE}.txt"
+
+          # The fastlane changelogs use `#new` / `#changes` / `#fixed` section markers;
+          # turn those into markdown headings and leave the bullet lists alone.
+          awk '
+            /^#[A-Za-z]/ {
+              section = substr($0, 2)
+              printf "\n### %s%s\n", toupper(substr(section, 1, 1)), substr(section, 2)
+              next
+            }
+            { print }
+          ' "$CHANGELOG" > notes.md
+
+          {
+            echo
+            echo "### Downloads"
+            echo
+            echo "| Build | Who it is for |"
+            echo "|---|---|"
+            echo "| \`stepsy-v${VERSION_NAME}-foss.apk\` | No Google dependencies. Same build as F-Droid/IzzyOnDroid. |"
+            echo "| \`stepsy-v${VERSION_NAME}-full.apk\` | Adds the Activity Recognition API to filter out steps while cycling or in a vehicle. |"
+            echo
+            echo "Both builds are offline-only and signed with the same key; you cannot switch"
+            echo "between flavors without uninstalling first."
+            echo
+            echo "<details><summary>SHA-256 checksums</summary>"
+            echo
+            echo '```'
+            sed 's|\./||' dist/SHA256SUMS.txt
+            echo '```'
+            echo
+            echo "</details>"
+          } >> notes.md
+
+          cat notes.md
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Stepsy v${{ needs.verify.outputs.version_name }}
+          body_path: notes.md
+          files: |
+            dist/*.apk
+            dist/SHA256SUMS.txt
+          draft: true
+          prerelease: ${{ needs.verify.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true

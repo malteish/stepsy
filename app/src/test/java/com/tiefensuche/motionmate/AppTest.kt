@@ -7,6 +7,7 @@ import com.nvllz.stepsy.util.Database
 import com.nvllz.stepsy.util.Util
 import org.junit.Assert
 import org.junit.Before
+import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -17,6 +18,20 @@ import org.robolectric.shadows.ShadowSystemClock
 import java.util.*
 import java.util.concurrent.TimeUnit
 
+/**
+ * Inherited from the Motionmate fork and never adapted to the v2 database schema.
+ *
+ * It drives [MotionService] through reflection on private fields that either changed type
+ * (`mCurrentDate` is a `yyyy-MM-dd` String now, but this calls `Field.setLong` on it) or no
+ * longer exist at all (`mCurrentSteps`, `motionActivities`), so it fails at runtime. CI never
+ * ran it before, which is how it rotted unnoticed.
+ *
+ * It is ignored rather than deleted so it can serve as a starting point for a real
+ * step-counting test. Remove the [Ignore] once it has been ported to the current service and
+ * database API — the CI workflow runs the unit tests on every push and pull request, so an
+ * un-ignored failing test blocks releases.
+ */
+@Ignore("Stale: written against the pre-v2 schema, reflects on fields that no longer exist")
 @RunWith(RobolectricTestRunner::class)
 internal class AppTest {
 

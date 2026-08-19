@@ -30,8 +30,12 @@ Bare `assembleDebug` builds *both* flavors and writes to
 Run a single test with the standard filter, e.g.
 `./gradlew testFossDebugUnitTest --tests "com.nvllz.stepsy.AppTest"`.
 
-Release builds require `app/keystore.jks` plus `KEYSTORE_PASSWORD`, `KEY_ALIAS`, and `KEY_PASSWORD`
-in the environment; the signing config is unconditional, so `assemble*Release` fails without them.
+Release signing is environment-driven: `KEYSTORE_FILE` (defaults to `app/keystore.jks`),
+`KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`. When the keystore is missing, `assemble*Release`
+still succeeds and produces an *unsigned* APK rather than failing — F-Droid and PR builds depend on
+that. `app/build.gradle` holds the version in two script-level variables (`appVersionCode`,
+`appVersionName`) that the release workflow greps, and `base.archivesName` names the outputs
+`stepsy-v<version>-<flavor>-<buildType>.apk`.
 
 Gradle needs network access to `dl.google.com` and Maven Central to resolve the Android Gradle
 Plugin. In a sandbox where those hosts are blocked, no Gradle task will run — verify changes by
@@ -39,11 +43,25 @@ reading rather than assuming a build failure means the code is broken.
 
 ## Testing reality
 
-There is exactly one test, `app/src/test/.../AppTest.kt`, and CI never runs it — the workflow
-(`.github/workflows/android.yml`) only runs `assembleDebug`. That test drives `MotionService`
-through reflection on private fields and was written against the pre-v2 database schema, when dates
-were `Long` timestamps; it still calls `Field.setLong` on `mCurrentDate`, which is a `String` now.
-Treat it as stale. If you touch step-counting logic, don't assume a green history means anything.
+There is exactly one test, `app/src/test/.../AppTest.kt`, and it is `@Ignore`d. It drives
+`MotionService` through reflection on private fields and was written against the pre-v2 database
+schema, when dates were `Long` timestamps; it still calls `Field.setLong` on `mCurrentDate`, which
+is a `String` now, and reflects on `mCurrentSteps` and `motionActivities`, which no longer exist.
+CI runs `testFossDebugUnitTest testFullDebugUnitTest` on every push and PR, so that ignore is the
+only reason the suite is green — effective unit coverage is zero. If you touch step-counting logic,
+don't assume a green history means anything; porting this test to the current API is worth doing.
+
+## CI and releases
+
+- `.github/workflows/ci.yml` — push to `master` and PRs: unit tests and debug APKs for both
+  flavors, plus a non-blocking Android Lint job (`continue-on-error`, because lint has never gated
+  this repo).
+- `.github/workflows/release.yml` — `v*` tags: verifies the tag matches `appVersionName` and that
+  `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` exists, builds and signs both
+  flavors, checks the signature with `apksigner`, and drafts a GitHub release. Manual dispatch runs
+  everything except the publish step.
+
+`RELEASING.md` is the runbook, including the four signing secrets the release workflow needs.
 
 ## Architecture
 
@@ -149,4 +167,3 @@ Inherited from the Motionmate fork and easy to trip over:
   its directory.
 - The test lives under `app/src/test/java/com/tiefensuche/motionmate/` but declares
   `package com.nvllz.stepsy`.
-- The CI workflow uploads `motionmate.apk` from a pre-flavor output path that no longer exists.

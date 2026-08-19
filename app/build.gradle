@@ -3,6 +3,32 @@ plugins {
     id 'kotlin-android'
 }
 
+// Single source of truth for the app version. The release workflow greps these two
+// lines to derive the artifact names and to locate the matching fastlane changelog,
+// so keep the literal `def appVersionCode = <int>` / `def appVersionName = "<str>"` shape.
+def appVersionCode = 20
+def appVersionName = "1.6.2"
+
+// Release signing is driven entirely by the environment so that CI can sign without
+// the keystore ever living in the repository:
+//   KEYSTORE_FILE     optional path to the keystore (default: app/keystore.jks)
+//   KEYSTORE_PASSWORD store password
+//   KEY_ALIAS         key alias
+//   KEY_PASSWORD      key password
+// When the keystore is absent (contributors, PR builds, F-Droid) release builds still
+// assemble, they are just left unsigned instead of failing the whole build.
+def keystoreFile = file(System.getenv("KEYSTORE_FILE") ?: "keystore.jks")
+def canSignRelease = keystoreFile.exists() &&
+        System.getenv("KEYSTORE_PASSWORD") != null &&
+        System.getenv("KEY_ALIAS") != null &&
+        System.getenv("KEY_PASSWORD") != null
+
+// Names the APKs `stepsy-v<version>-<flavor>-<buildType>.apk` instead of `app-*.apk`,
+// so release assets carry their version without a rename step in CI.
+base {
+    archivesName = "stepsy-v${appVersionName}"
+}
+
 android {
     namespace 'com.nvllz.stepsy'
     compileSdk 35
@@ -10,8 +36,8 @@ android {
         applicationId "com.nvllz.stepsy"
         minSdkVersion 26
         targetSdkVersion 35
-        versionCode 20
-        versionName "1.6.2"
+        versionCode appVersionCode
+        versionName appVersionName
         proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
     }
     flavorDimensions += "distribution"
@@ -28,10 +54,12 @@ android {
     }
     signingConfigs {
         release {
-            storeFile file("keystore.jks")
-            storePassword System.getenv("KEYSTORE_PASSWORD")
-            keyAlias System.getenv("KEY_ALIAS")
-            keyPassword System.getenv("KEY_PASSWORD")
+            if (canSignRelease) {
+                storeFile keystoreFile
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            }
         }
     }
     buildTypes {
@@ -45,7 +73,7 @@ android {
             manifestPlaceholders = [icon: "@drawable/ic_launcher"]
             minifyEnabled true
             shrinkResources true
-            signingConfig signingConfigs.release
+            signingConfig = (canSignRelease ? signingConfigs.release : null)
         }
     }
     compileOptions {
