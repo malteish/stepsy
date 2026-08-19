@@ -5,12 +5,14 @@
 
     <!-- General UI Labels -->
     <string name="distance_today" translatable="false">%1$.2f %2$s</string>
-    <string name="steps_day_display">%1$s / %2$.2f %3$s / %4$d kcal</string>
+    <string name="steps_day_display">%1$s / %2$.2f %3$s / %4$d %5$s</string>
     <string name="steps_format" translatable="false">%1$s / %2$.2f %3$s</string>
     <string name="week_display_format">שבוע %1$d</string>
     <string name="week_display_range" translatable="false">%1$s - %2$s</string>
     <string name="no_entry">אין רשומות עבור %1$s</string>
-    <string name="calories">%1$d ק׳ קל׳</string>
+    <string name="calories">%1$d %2$s</string>
+    <string name="unit_kcal">ק׳ קל׳</string>
+    <string name="unit_kj">kJ</string>
     <string name="steps_month">החודש</string>
     <string name="avg_distance">ממוצע ליום</string>
     <string name="total_distance">מרחק כולל</string>

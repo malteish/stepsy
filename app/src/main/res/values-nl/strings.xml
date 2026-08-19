@@ -3,10 +3,10 @@
     <!-- App Metadata -->
 
     <!-- General UI Labels -->
-    <string name="steps_day_display">%1$s / %2$.2f %3$s / %4$d kcal</string>
+    <string name="steps_day_display">%1$s / %2$.2f %3$s / %4$d %5$s</string>
     <string name="week_display_format">Week %1$d</string>
     <string name="no_entry">Geen gegevens voor %1$s</string>
-    <string name="calories">%1$d kcal</string>
+    <string name="calories">%1$d %2$s</string>
     <string name="steps_month">Deze maand</string>
     <string name="avg_distance">Gemiddeld per dag</string>
     <string name="total_distance">Totale afstand</string>

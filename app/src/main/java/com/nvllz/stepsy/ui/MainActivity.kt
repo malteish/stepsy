@@ -713,7 +713,8 @@ internal class MainActivity : AppCompatActivity() {
             mTextViewSteps.text = stepsPlural
             mTextViewCalories.text = String.format(
                 getString(R.string.calories),
-                Util.stepsToCalories(steps)
+                Util.stepsToEnergy(steps),
+                Util.energyUnit(this)
             )
             mTextViewCalories.visibility = View.VISIBLE
             mTextAvgPerDayHeader.visibility = View.GONE
@@ -792,7 +793,8 @@ internal class MainActivity : AppCompatActivity() {
                 stepsPlural,
                 Util.stepsToDistance(dayEntry.steps),
                 Util.distanceUnit(),
-                Util.stepsToCalories(dayEntry.steps)
+                Util.stepsToEnergy(dayEntry.steps),
+                Util.energyUnit(this)
             )
         } else {
             mTextViewDayDetails.text = String.format(
@@ -800,7 +802,8 @@ internal class MainActivity : AppCompatActivity() {
                 resources.getQuantityString(R.plurals.steps_formatted, 0, 0),
                 0.0,
                 Util.distanceUnit(),
-                0
+                0,
+                Util.energyUnit(this)
             )
         }
 

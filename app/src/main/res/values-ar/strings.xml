@@ -3,10 +3,12 @@
     <!-- App Metadata -->
 
     <!-- General UI Labels -->
-    <string name="steps_day_display">%1$s / %2$.2f %3$s / %4$d سعرة حرارية</string>
+    <string name="steps_day_display">%1$s / %2$.2f %3$s / %4$d %5$s</string>
     <string name="week_display_format">الأسبوع %1$d</string>
     <string name="no_entry">لا يوجد سجل لـ %1$s</string>
-    <string name="calories">%1$d سعرة حرارية</string>
+    <string name="calories">%1$d %2$s</string>
+    <string name="unit_kcal">سعرة حرارية</string>
+    <string name="unit_kj">كيلوجول</string>
     <string name="steps_month">هذا الشهر</string>
     <string name="avg_distance">المعدل اليومي</string>
     <string name="total_distance">المسافة الكلية</string>
