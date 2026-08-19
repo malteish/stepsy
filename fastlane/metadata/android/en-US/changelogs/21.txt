@@ -1,0 +1,3 @@
+#changes
+- test release: first run of the automated release pipeline
+- no functional changes since 1.6.2

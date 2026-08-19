@@ -6,8 +6,8 @@ plugins {
 // Single source of truth for the app version. The release workflow greps these two
 // lines to derive the artifact names and to locate the matching fastlane changelog,
 // so keep the literal `def appVersionCode = <int>` / `def appVersionName = "<str>"` shape.
-def appVersionCode = 20
-def appVersionName = "1.6.2"
+def appVersionCode = 21
+def appVersionName = "1.7.0-alpha.0"
 
 // Release signing is driven entirely by the environment so that CI can sign without
 // the keystore ever living in the repository:
