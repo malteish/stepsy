@@ -8,6 +8,7 @@ import androidx.core.content.ContextCompat
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.nvllz.stepsy.util.Util.EnergyUnit
 import com.nvllz.stepsy.util.Util.UnitSystem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -38,6 +39,7 @@ object AppPreferences {
         val WEIGHT                               = stringPreferencesKey("weight")
         val STEP_LENGTH                          = floatPreferencesKey("step_length")
         val UNIT_SYSTEM                          = stringPreferencesKey("unit_system")
+        val ENERGY_UNIT                          = stringPreferencesKey("energy_unit")
         val DATE_FORMAT                          = stringPreferencesKey("date_format")
         val FIRST_DAY_OF_WEEK                    = stringPreferencesKey("first_day_of_week")
         val APP_VERSION_CODE                     = intPreferencesKey("app_version_code")
@@ -153,6 +155,23 @@ object AppPreferences {
         set(value) = runBlocking {
             dataStore.edit {
                 it[PreferenceKeys.UNIT_SYSTEM] = if (value == UnitSystem.IMPERIAL) "imperial" else "metric"
+            }
+        }
+
+    // Energy unit
+
+    fun energyUnitFlow(): Flow<EnergyUnit> = dataStore.data.map {
+        when (it[PreferenceKeys.ENERGY_UNIT]) {
+            "kcal" -> EnergyUnit.KILOCALORIES
+            else   -> EnergyUnit.KILOJOULES
+        }
+    }
+
+    var energyUnit: EnergyUnit
+        get() = runBlocking { energyUnitFlow().first() }
+        set(value) = runBlocking {
+            dataStore.edit {
+                it[PreferenceKeys.ENERGY_UNIT] = if (value == EnergyUnit.KILOCALORIES) "kcal" else "kj"
             }
         }
 

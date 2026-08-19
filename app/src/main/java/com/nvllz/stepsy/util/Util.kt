@@ -1,12 +1,20 @@
 package com.nvllz.stepsy.util
 
+import android.content.Context
 import androidx.appcompat.app.AppCompatDelegate
+import com.nvllz.stepsy.R
 import java.util.*
 
 object Util {
     enum class UnitSystem {
         METRIC, IMPERIAL
     }
+
+    enum class EnergyUnit {
+        KILOJOULES, KILOCALORIES
+    }
+
+    private const val KJ_PER_KCAL = 4.184
 
     internal val calendar: Calendar
         get() {
@@ -77,8 +85,19 @@ object Util {
         }
     }
 
-    internal fun stepsToCalories(steps: Number): Int {
-        return (steps.toInt() * AppPreferences.weight * 0.0005).toInt()
+    internal fun energyUnit(context: Context): String = context.getString(
+        when (AppPreferences.energyUnit) {
+            EnergyUnit.KILOJOULES   -> R.string.unit_kj
+            EnergyUnit.KILOCALORIES -> R.string.unit_kcal
+        }
+    )
+
+    internal fun stepsToEnergy(steps: Number): Int {
+        val kcal = steps.toInt() * AppPreferences.weight * 0.0005
+        return when (AppPreferences.energyUnit) {
+            EnergyUnit.KILOCALORIES -> kcal.toInt()
+            EnergyUnit.KILOJOULES   -> (kcal * KJ_PER_KCAL).toInt()
+        }
     }
 
     internal fun applyTheme(theme: String) {

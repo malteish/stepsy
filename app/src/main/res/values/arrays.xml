@@ -51,6 +51,16 @@
         <item>imperial</item>
     </string-array>
 
+    <!-- Energy Unit -->
+    <string-array name="energy_unit_entries">
+        <item>Kilojoules (kJ)</item>
+        <item>Kilocalories (kcal)</item>
+    </string-array>
+    <string-array name="energy_unit_values" translatable="false">
+        <item>kj</item>
+        <item>kcal</item>
+    </string-array>
+
     <!-- Languages -->
     <string-array name="language_names">
         <item>@string/preference_system</item>

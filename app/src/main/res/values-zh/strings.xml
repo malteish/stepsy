@@ -3,10 +3,12 @@
     <!-- App Metadata -->
 
     <!-- General UI Labels -->
-    <string name="steps_day_display">%1$s / %2$.2f %3$s / %4$d 千卡</string>
+    <string name="steps_day_display">%1$s / %2$.2f %3$s / %4$d %5$s</string>
     <string name="week_display_format">第 %1$d 周</string>
     <string name="no_entry">%1$s 没有记录</string>
-    <string name="calories">%1$d 千卡</string>
+    <string name="calories">%1$d %2$s</string>
+    <string name="unit_kcal">千卡</string>
+    <string name="unit_kj">千焦</string>
     <string name="steps_month">本月</string>
     <string name="avg_distance">每日平均</string>
     <string name="total_distance">总距离</string>

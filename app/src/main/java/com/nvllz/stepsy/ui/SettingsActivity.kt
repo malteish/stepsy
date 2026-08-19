@@ -29,6 +29,7 @@ import com.nvllz.stepsy.service.MotionService
 import com.nvllz.stepsy.service.isPlayServicesAvailable
 import com.nvllz.stepsy.util.AppPreferences
 import com.nvllz.stepsy.util.Util
+import com.nvllz.stepsy.util.Util.EnergyUnit
 import com.nvllz.stepsy.util.Util.UnitSystem
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
@@ -47,6 +48,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var languageSummary: TextView
     private lateinit var themeSummary: TextView
     private lateinit var unitSystemSummary: TextView
+    private lateinit var energyUnitSummary: TextView
     private lateinit var dateFormatSummary: TextView
     private lateinit var firstDaySummary: TextView
     private lateinit var aboutSummary: TextView
@@ -57,6 +59,9 @@ class SettingsActivity : AppCompatActivity() {
 
     private val isImperial: Boolean
         get() = AppPreferences.unitSystem == UnitSystem.IMPERIAL
+
+    private val energyUnitValue: String
+        get() = if (AppPreferences.energyUnit == EnergyUnit.KILOCALORIES) "kcal" else "kj"
 
     private fun cmToTotalInches(cm: Int): Int = (cm / 2.54).roundToInt()
 
@@ -128,6 +133,7 @@ class SettingsActivity : AppCompatActivity() {
         languageSummary       = findViewById(R.id.pref_language_summary)
         themeSummary          = findViewById(R.id.pref_theme_summary)
         unitSystemSummary     = findViewById(R.id.pref_unit_system_summary)
+        energyUnitSummary     = findViewById(R.id.pref_energy_unit_summary)
         dateFormatSummary     = findViewById(R.id.pref_date_format_summary)
         firstDaySummary       = findViewById(R.id.pref_first_day_summary)
         aboutSummary          = findViewById(R.id.pref_about_summary)
@@ -150,6 +156,10 @@ class SettingsActivity : AppCompatActivity() {
 
         val unitValue = if (isImperial) "imperial" else "metric"
         unitSystemSummary.text = labelFromEntries(R.array.unit_system_entries, R.array.unit_system_values, unitValue)
+
+        energyUnitSummary.text = labelFromEntries(
+            R.array.energy_unit_entries, R.array.energy_unit_values, energyUnitValue
+        )
 
         dateFormatSummary.text = AppPreferences.dateFormatString
 
@@ -404,6 +414,21 @@ class SettingsActivity : AppCompatActivity() {
                     refreshStepLengthSummary()
                 }
                 restartMotionService(this)
+            }
+        }
+
+        findViewById<View>(R.id.pref_energy_unit).setOnClickListener {
+            val entries = resources.getStringArray(R.array.energy_unit_entries)
+            val values  = resources.getStringArray(R.array.energy_unit_values)
+            showSingleChoiceDialog(getString(R.string.energy_unit), entries, values, energyUnitValue) { chosen ->
+                lifecycleScope.launch {
+                    AppPreferences.dataStore.edit { prefs ->
+                        prefs[AppPreferences.PreferenceKeys.ENERGY_UNIT] = chosen
+                    }
+                    energyUnitSummary.text = labelFromEntries(
+                        R.array.energy_unit_entries, R.array.energy_unit_values, chosen
+                    )
+                }
             }
         }
 
